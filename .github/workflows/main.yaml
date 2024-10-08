@@ -1,7 +1,7 @@
-name: Deploy EKS Cluster and Nginx
+name: Deploy EKS Cluster, Nginx, EFK, and Grafana
 
 on:
-    workflow_dispatch:
+  workflow_dispatch:
 
 env:
   AWS_REGION: us-east-1
@@ -166,50 +166,33 @@ jobs:
         
     - name: Apply Kubernetes configurations
       run: |
-          EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-          ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
-          kubectl apply -f nginx-index-html-configmap.yaml && \
-          kubectl apply -f nginx-deployment.yaml && \
-          kubectl apply -f nginx-service.yaml'
-    
+        EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
+        ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
+        kubectl apply -f nginx-index-html-configmap.yaml && \
+        kubectl apply -f nginx-deployment.yaml && \
+        kubectl apply -f nginx-service.yaml'
+  
+    - name: Check node status
+      run: |
+        EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
+        ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
+        kubectl get nodes
+        kubectl describe nodes'
+
+    - name: Check Nginx deployment
+      run: |
+        EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
+        ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
+        kubectl get deployments
+        kubectl describe deployment nginx-deployment
+        kubectl get events --sort-by=.metadata.creationTimestamp'
+
     - name: Wait for Nginx pod to be ready
       run: |
-          EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-          ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
-          kubectl wait --for=condition=ready pod -l app=nginx --timeout=300s'
-      
-    - name: Diagnose Nginx deployment
-      run: |
-          EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-          ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
-          kubectl get pods -l app=nginx -o wide
-          kubectl describe pod -l app=nginx
-          kubectl logs -l app=nginx --all-containers=true
-          kubectl get events --sort-by=.metadata.creationTimestamp | tail -n 20
-          '
-    - name: Check pod status
-      run: |
         EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
         ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
-        kubectl get pods -l app=nginx -o wide
-        kubectl describe pod -l app=nginx
-        kubectl logs -l app=nginx --all-containers=true'
+        kubectl wait --for=condition=ready pod -l app=nginx --timeout=300s'
     
-    - name: Verify deployment status
-      run: |
-        EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-        ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
-        kubectl get deployments && \
-        kubectl get pods && \
-        kubectl get services'
-        
-    - name: Check network configuration
-      run: |
-        EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-        ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
-        kubectl get services
-        kubectl describe service nginx-service'
-
     - name: Get Nginx Service URL
       id: nginx-url
       run: |
@@ -242,11 +225,6 @@ jobs:
       uses: actions/download-artifact@v3
       with:
         name: ssh-key
-
-    - name: Download connection info
-      uses: actions/download-artifact@v3
-      with:
-        name: connection-info
 
     - name: Set permissions for SSH key
       run: chmod 600 jenkins.pem
@@ -291,11 +269,6 @@ jobs:
     - name: Set permissions for SSH key
       run: chmod 600 jenkins.pem
 
-    - name: Download connection info
-      uses: actions/download-artifact@v3
-      with:
-        name: connection-info
-
     - name: Deploy Prometheus and Grafana
       run: |
         EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
@@ -316,7 +289,7 @@ jobs:
         sudo netfilter-persistent save
         sudo netfilter-persistent reload
         '
-
+        
     - name: Get Prometheus and Grafana URLs
       id: monitoring-urls
       run: |
@@ -378,4 +351,4 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: kubeconfig
-        path: ./kubeconfig      
+        path: ./kubeconfig
