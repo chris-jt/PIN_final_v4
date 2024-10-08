@@ -1,4 +1,4 @@
-name: Deploy EKS Cluster, Nginx, EFK, and Grafana
+name: Deploy Infra y Nginx
 
 on:
   workflow_dispatch:
