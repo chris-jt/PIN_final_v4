@@ -1,0 +1,244 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+data:
+  nginx.conf: |
+    user nginx;
+    worker_processes auto;
+    error_log /var/log/nginx/error.log;
+    pid /run/nginx.pid;
+
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        log_format json_combined escape=json
+        '{'
+            '"time_local":"$time_local",'
+            '"remote_addr":"$remote_addr",'
+            '"remote_user":"$remote_user",'
+            '"request":"$request",'
+            '"status": "$status",'
+            '"body_bytes_sent":"$body_bytes_sent",'
+            '"request_time":"$request_time",'
+            '"http_referrer":"$http_referer",'
+            '"http_user_agent":"$http_user_agent"'
+        '}';
+
+        access_log /var/log/nginx/access.log json_combined;
+
+        server {
+            listen 80;
+            server_name localhost;
+
+            location / {
+                root /usr/share/nginx/html;
+                index index.html;
+            }
+
+            location /nginx_status {
+                stub_status on;
+                access_log off;
+                allow 127.0.0.1;
+                deny all;
+            }
+        }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-index-html
+data:
+  index.html: |
+    <!DOCTYPE html> 
+    <html lang="es">
+    <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bienvenido a Nuestro Proyecto</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        header {
+        background-color: #3498db;
+        color: #fff;
+        text-align: center;
+        padding: 1.5rem;
+        border-radius: 5px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+        margin-bottom: 0;
+    }
+    h2 {
+        color: #2c3e50;
+    }
+    .info-item {
+        background: #fff;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    .info-item ul {
+        list-style-type: none;
+        padding-left: 0;
+    }
+    .info-item ul li {
+        margin-bottom: 10px;
+        padding-left: 20px;
+        position: relative;
+    }
+    .info-item ul li:before {
+        content: "✔️";
+        color: green;
+        position: absolute;
+        left: 0;
+    }
+    .container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    }
+    .section {
+        border: 2px solid #333;
+        padding: 20px;
+        margin: 20px;
+        border-radius: 10px;
+        width: 90%;
+        max-width: 1200px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        background-color: #fff;
+    }
+    .step {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        margin: 20px 0;
+    }
+    .step img {
+        width: 80px;
+        height: auto;
+        margin: 10px 20px;
+    }
+    .arrow {
+        font-size: 24px;
+        margin: 0 10px;
+    }
+    /* Responsive design */
+    @media (max-width: 768px) {
+        .step {
+            flex-direction: column;
+        }
+        .arrow {
+            display: none;
+        }
+    }
+    </style>
+    </head>
+    <body>
+    <header>
+    <h1>Bienvenido a Nuestro Proyecto</h1>
+    </header>
+
+    <div class="container">
+    <h2>Información del Proyecto</h2>
+
+    <div class="info-item">
+        <strong>Alojamiento:</strong> Esta página está alojada en un cluster de Kubernetes (EKS) en Amazon Web Services (AWS).
+    </div>
+
+    <div class="info-item">
+        <strong>Servidor Web:</strong> Estamos utilizando Nginx como servidor web para servir esta página.
+    </div>
+
+    <div class="info-item">
+        <strong>Despliegue:</strong> El despliegue se realiza mediante un pipeline de CI/CD utilizando GitHub Actions.
+    </div>
+
+    <div class="info-item">
+        <strong>Monitorización:</strong> Utilizamos Prometheus con Grafana para:
+        <ul>
+        <li>Monitoreo de métricas en tiempo real</li>
+        <li>Alertas basadas en métricas</li>
+        <li>Visualización de datos de series temporales</li>
+        <li>Monitoreo de infraestructura y microservicios</li>        
+        </ul>
+    </div>
+
+    <div class="info-item">
+        <strong>Monitoreo:</strong> Utilizamos el stack EFK (Elasticsearch, Fluentd, Kibana) para la recopilación y visualización de logs.
+        <ul>
+        <li>Análisis de logs y eventos</li>
+        <li>Monitoreo de aplicaciones y sistemas</li>
+        <li>Depuración y solución de problemas</li>
+        <li>Análisis de seguridad y cumplimiento normativo</li>
+        </ul>
+    </div>
+
+    <h2>Esquema del Proyecto IaC</h2>
+
+    <div class="section">
+    <div class="step">
+        <img src="https://cdn.iconscout.com/icon/free/png-256/github-153-675523.png" alt="GitHub Actions">
+        <div class="arrow">➡️</div>
+        <img src="https://d1.awsstatic.com/logos/cloudformation/logo-cloudformation.png" alt="CloudFormation" width="100">
+        <div class="arrow">➡️</div>
+        <img src="https://logos-world.net/wp-content/uploads/2020/11/Amazon-Web-Services-AWS-Logo.png" alt="AWS EC2" width="100">
+    </div>
+
+    <div class="step">
+        <div class="arrow">⬇️</div>
+    </div>
+
+    <div class="step">
+        <img src="https://cdn.worldvectorlogo.com/logos/aws-cli.svg" alt="AWS CLI">
+        <div class="arrow">➡️</div>
+        <img src="https://cdn.worldvectorlogo.com/logos/kubernetes-2.svg" alt="kubectl">
+        <div class="arrow">➡️</div>
+        <img src="https://d33wubrfki0l68.cloudfront.net/c498c40d0e8f96b60f16224695f55f42e69a2265/17c38/images/logo-eks.svg" alt="EKS" width="100">
+    </div>
+
+    <div class="step">
+        <div class="arrow">⬇️</div>
+    </div>
+
+    <div class="step">
+        <img src="https://cdn.worldvectorlogo.com/logos/nginx-1.svg" alt="Nginx" width="80">
+        <div class="arrow">➡️</div>
+        <img src="https://www.docker.com/wp-content/uploads/2022/03/vertical-logo-monochromatic.png" alt="Docker" width="80">
+        <div class="arrow">➡️</div>
+        <img src="https://helm.sh/img/helm.svg" alt="Helm" width="80">
+    </div>
+
+    <div class="step">
+        <div class="arrow">⬇️</div>
+    </div>
+
+    <div class="step">
+        <img src="https://cdn.worldvectorlogo.com/logos/kibana.svg" alt="Kibana" width="80">
+        <div class="arrow">➡️</div>
+        <img src="https://upload.wikimedia.org/wikipedia/commons/3/38/Prometheus_software_logo.svg" alt="Prometheus" width="80">
+        <div class="arrow">➡️</div>
+        <img src="https://grafana.com/static/img/menu/grafana2.svg" alt="Grafana" width="80">
+    </div>
+    </div>
+
+    </div>
+
+    </body>
+    </html>
