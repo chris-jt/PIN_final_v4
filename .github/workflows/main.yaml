@@ -140,6 +140,8 @@ jobs:
   Deploy_Nginx:
     needs: [Deploy_CloudFormation, Conexion_EC2]
     runs-on: ubuntu-latest
+    outputs:
+      nginx_url: ${{ steps.nginx-url.outputs.nginx_url }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
@@ -201,22 +203,12 @@ jobs:
         kubectl get service nginx-service -o jsonpath="{.status.loadBalancer.ingress[0].hostname}"
         ')
         echo "nginx_url=http://$NGINX_URL" >> $GITHUB_OUTPUT
-  
-    - name: Save initial connection information
-      run: |
-          echo "EC2 Public IP: ${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}" > connection_info.txt
-          echo "Nginx Service URL: ${{ steps.nginx-url.outputs.nginx_url }}" >> connection_info.txt
-          echo "To connect via SSH: ssh -i jenkins.pem ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}" >> connection_info.txt
-
-    - name: Upload initial connection info
-      uses: actions/upload-artifact@v3
-      with:
-        name: connection-info
-        path: connection_info.txt
 
   Deploy_EFK:
     needs: [Deploy_CloudFormation, Conexion_EC2, Deploy_Nginx]
     runs-on: ubuntu-latest
+    outputs:
+      kibana_url: ${{ steps.kibana-url.outputs.kibana_url }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
@@ -244,120 +236,98 @@ jobs:
         ')
         echo "kibana_url=http://$KIBANA_URL" >> $GITHUB_OUTPUT
 
-    - name: Update connection information
-      run: |
-        echo "Kibana URL: ${{ steps.kibana-url.outputs.kibana_url }}" >> connection_info.txt
-
-    - name: Upload updated connection info
-      uses: actions/upload-artifact@v3
-      with:
-        name: connection-info
-        path: connection_info.txt
-
   Deploy_Prometheus_Grafana:
     needs: [Deploy_CloudFormation, Conexion_EC2, Deploy_Nginx, Deploy_EFK]
     runs-on: ubuntu-latest
+    outputs:
+      prometheus_url: ${{ steps.monitoring-urls.outputs.prometheus_url }}
+      grafana_url: ${{ steps.monitoring-urls.outputs.grafana_url }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-      - name: Download SSH key
-        uses: actions/download-artifact@v3
-        with:
-          name: ssh-key
+    - name: Download SSH key
+      uses: actions/download-artifact@v3
+      with:
+        name: ssh-key
 
-      - name: Set permissions for SSH key
-        run: chmod 600 jenkins.pem
+    - name: Set permissions for SSH key
+      run: chmod 600 jenkins.pem
 
-      - name: Deploy Prometheus and Grafana
-        run: |
-          EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-          scp -i jenkins.pem -o StrictHostKeyChecking=no kubernetes/prometheus-grafana.yaml ubuntu@$EC2_IP:~
-          ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
-          kubectl apply -f prometheus-grafana.yaml
-          kubectl wait --for=condition=ready pod -l app=prometheus --timeout=300s
-          kubectl wait --for=condition=ready pod -l app=grafana --timeout=300s
-          '
+    - name: Deploy Prometheus and Grafana
+      run: |
+        EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
+        scp -i jenkins.pem -o StrictHostKeyChecking=no kubernetes/prometheus-grafana.yaml ubuntu@$EC2_IP:~
+        ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
+        kubectl apply -f prometheus-grafana.yaml
+        kubectl wait --for=condition=ready pod -l app=prometheus --timeout=300s
+        kubectl wait --for=condition=ready pod -l app=grafana --timeout=300s
+        '
 
-      - name: Diagnose Prometheus and Grafana deployment
-        if: failure()
-        run: |
-          EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-          ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
-          echo "Prometheus Pods:"
-          kubectl get pods -l app=prometheus -o wide
-          echo "\nPrometheus Pod Description:"
-          kubectl describe pod -l app=prometheus
-          echo "\nPrometheus Logs:"
-          kubectl logs -l app=prometheus --all-containers=true
-          echo "\nGrafana Pods:"
-          kubectl get pods -l app=grafana -o wide
-          echo "\nGrafana Pod Description:"
-          kubectl describe pod -l app=grafana
-          echo "\nGrafana Logs:"
-          kubectl logs -l app=grafana --all-containers=true
-          echo "\nRecent Events:"
-          kubectl get events --sort-by=.metadata.creationTimestamp | tail -n 20
-          '
+    - name: Diagnose Prometheus and Grafana deployment
+      if: failure()
+      run: |
+        EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
+        ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
+        echo "Prometheus Pods:"
+        kubectl get pods -l app=prometheus -o wide
+        echo "\nPrometheus Pod Description:"
+        kubectl describe pod -l app=prometheus
+        echo "\nPrometheus Logs:"
+        kubectl logs -l app=prometheus --all-containers=true
+        echo "\nGrafana Pods:"
+        kubectl get pods -l app=grafana -o wide
+        echo "\nGrafana Pod Description:"
+        kubectl describe pod -l app=grafana
+        echo "\nGrafana Logs:"
+        kubectl logs -l app=grafana --all-containers=true
+        echo "\nRecent Events:"
+        kubectl get events --sort-by=.metadata.creationTimestamp | tail -n 20
+        '
 
-      - name: Configure port-forwarding for Prometheus
-        run: |
-          EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-          ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
-          sudo DEBIAN_FRONTEND=noninteractive apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent
-          sudo iptables -t nat -A PREROUTING -p tcp --dport 8080 -j REDIRECT --to-port 30090
-          sudo netfilter-persistent save
-          sudo netfilter-persistent reload
-          '  
-      - name: Get Prometheus and Grafana URLs
-        id: monitoring-urls
-        run: |
-          EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-          PROMETHEUS_URL="http://$EC2_IP:8080"
-          GRAFANA_URL=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
+    - name: Configure port-forwarding for Prometheus
+      run: |
+        EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
+        ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
+        sudo DEBIAN_FRONTEND=noninteractive apt-get update
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent
+        sudo iptables -t nat -A PREROUTING -p tcp --dport 8080 -j REDIRECT --to-port 30090
+        sudo netfilter-persistent save
+        sudo netfilter-persistent reload
+        '
+        
+    - name: Get Prometheus and Grafana URLs
+      id: monitoring-urls
+      run: |
+        EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
+        PROMETHEUS_URL="http://$EC2_IP:8080"
+        GRAFANA_URL=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
           kubectl get service grafana -o jsonpath="{.status.loadBalancer.ingress[0].hostname}"
-          ')
-          echo "prometheus_url=$PROMETHEUS_URL" >> $GITHUB_OUTPUT
-          echo "grafana_url=http://$GRAFANA_URL" >> $GITHUB_OUTPUT
+        ')
+        echo "prometheus_url=$PROMETHEUS_URL" >> $GITHUB_OUTPUT
+        echo "grafana_url=http://$GRAFANA_URL" >> $GITHUB_OUTPUT
 
-      - name: Update connection information
+  Final_Setup:
+    needs: [Deploy_CloudFormation, Deploy_Nginx, Deploy_EFK, Deploy_Prometheus_Grafana]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consolidate connection info
         run: |
-          echo "Prometheus URL: ${{ steps.monitoring-urls.outputs.prometheus_url }}" >> connection_info.txt
-          echo "Grafana URL: ${{ steps.monitoring-urls.outputs.grafana_url }}" >> connection_info.txt
+          echo "EC2 Public IP: ${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}" > connection_info.txt
+          echo "Nginx Service URL: ${{ needs.Deploy_Nginx.outputs.nginx_url }}" >> connection_info.txt
+          echo "Kibana URL: ${{ needs.Deploy_EFK.outputs.kibana_url }}" >> connection_info.txt
+          echo "Prometheus URL: ${{ needs.Deploy_Prometheus_Grafana.outputs.prometheus_url }}" >> connection_info.txt
+          echo "Grafana URL: ${{ needs.Deploy_Prometheus_Grafana.outputs.grafana_url }}" >> connection_info.txt
+          echo "To connect via SSH: ssh -i jenkins.pem ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}" >> connection_info.txt
 
-      - name: Upload updated connection info
+      - name: Display connection info
+        run: cat connection_info.txt
+
+      - name: Upload connection info
         uses: actions/upload-artifact@v3
         with:
           name: connection-info
           path: connection_info.txt
-
-  Final_Setup:
-    needs: [Deploy_Nginx, Deploy_EFK, Deploy_Prometheus_Grafana]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download connection info
-        uses: actions/download-artifact@v3
-        with:
-          name: connection-info
-
-      - name: Consolidate connection info
-        run: |
-          echo "EC2 Public IP: ${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}" > final_connection_info.txt
-          echo "Nginx Service URL: ${{ needs.Deploy_Nginx.outputs.nginx_url }}" >> final_connection_info.txt
-          echo "Kibana URL: ${{ needs.Deploy_EFK.outputs.kibana_url }}" >> final_connection_info.txt
-          echo "Prometheus URL: ${{ needs.Deploy_Prometheus_Grafana.outputs.prometheus_url }}" >> final_connection_info.txt
-          echo "Grafana URL: ${{ needs.Deploy_Prometheus_Grafana.outputs.grafana_url }}" >> final_connection_info.txt
-          echo "To connect via SSH: ssh -i jenkins.pem ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}" >> final_connection_info.txt
-
-      - name: Display final connection info
-        run: cat final_connection_info.txt
-
-      - name: Upload final connection info
-        uses: actions/upload-artifact@v3
-        with:
-          name: final-connection-info
-          path: final_connection_info.txt
 
   Download_Kubeconfig:
     needs: [Deploy_CloudFormation, Conexion_EC2, Deploy_Nginx]
