@@ -73,9 +73,24 @@ sudo mv ./aws-iam-authenticator /usr/local/bin
 
 # Crear cluster EKS
 log "Creando cluster EKS..."
-eksctl create cluster --name $CLUSTER_NAME --region $AWS_REGION --node-type $NODE_TYPE --nodes $NODE_COUNT || handle_error "No se pudo crear el cluster EKS"
+# eksctl create cluster --name $CLUSTER_NAME --region $AWS_REGION --node-type $NODE_TYPE --nodes $NODE_COUNT || handle_error "No se pudo crear el cluster EKS"
+eksctl create cluster \
+  --name $CLUSTER_NAME  \
+  --version 1.30 \
+  --region $AWS_REGION \
+  --nodegroup-name PIN-nodes \
+  --node-type $NODE_TYPE \
+  --nodes $NODE_COUNT \
+  --nodes-min 1 \
+  --nodes-max 3 \
+  --managed \
+  --asg-access \
+  --external-dns-access \
+  --full-ecr-access \
+  --appmesh-access \
+  --alb-ingress-access || handle_error "No se pudo crear el cluster EKS"
 
-echo "Configurando kubectl para el nuevo cluster..."
+echo "Configurando kubectl para el cluster..."
 if ! aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION; then
     echo "Error al actualizar kubeconfig"
     exit 1
@@ -103,15 +118,42 @@ if ! kubectl get nodes; then
     exit 1
 fi
 
+echo "Creando namespaces para monitoreo"
+kubectl create namespace monitoring
+
 log "Configuración completada. El cluster EKS está listo para usar."
 
-echo "Installing Helm"
+echo "Instalando Helm"
 curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
 helm version
 
 # Add Prometheus Helm repository
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
+helm upgrade -i prometheus prometheus-community/prometheus \
+  --namespace monitoring \
+  --set alertmanager.persistentVolume.storageClass="gp2" \
+  --set server.persistentVolume.storageClass="gp2" \
+  --set server.persistentVolume.size=20Gi
+
+echo "verificando prometheus"
+kubectl get pods -n prometheus
+
+# Add Grafana Helm repository
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
+
+# Installando Grafana
+helm install grafana grafana/grafana \
+    --namespace monitoring \
+    --set persistence.storageClassName="gp2" \
+    --set persistence.enabled=true \
+    --set persistence.size=10Gi \
+    --set service.type=LoadBalancer
+  
+# Obtener password Grafana
+echo "password Grafana: "
+kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
 
 # Asegurarse de que las configuraciones estén disponibles para el usuario ubuntu
 mkdir -p /home/ubuntu/.kube
