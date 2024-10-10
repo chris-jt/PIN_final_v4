@@ -5,7 +5,7 @@ set -x
 export CLUSTER_NAME=${CLUSTER_NAME:-"cluster-PIN"}
 export AWS_REGION=${AWS_REGION:-"us-east-1"}
 export NODE_TYPE=${NODE_TYPE:-"t3.medium"}
-export NODE_COUNT=${NODE_COUNT:-2}
+export NODE_COUNT=${NODE_COUNT:-3}
 
 # Función para esperar a que apt esté disponible
 wait_for_apt() {
@@ -98,7 +98,7 @@ eksctl create cluster \
   --node-type $NODE_TYPE \
   --nodes $NODE_COUNT \
   --nodes-min 1 \
-  --nodes-max 3 \
+  --nodes-max 4 \
   --managed \
   --asg-access \
   --external-dns-access \
@@ -160,7 +160,9 @@ helm install prometheus prometheus-community/prometheus \
     --set alertmanager.persistentVolume.enabled=false \
     --set server.persistentVolume.enabled=false \
     --set alertmanager.emptyDir.enabled=true \
-    --set server.emptyDir.enabled=true
+    --set server.emptyDir.enabled=true \
+    --set server.resources.limits.cpu=500m \
+    --set server.resources.limits.memory=512Mi
 
 # Esperar y verificar el estado de Prometheus
 sleep 60
