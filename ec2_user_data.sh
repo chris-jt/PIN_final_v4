@@ -206,8 +206,9 @@ while [ -z "$GRAFANA_URL" ]; do
     [ -z "$GRAFANA_URL" ] && sleep 10
 done
 
-echo "URL de Grafana: http://$GRAFANA_URL"
-echo "Contraseña de Grafana: $GRAFANA_PASSWORD"
+# Guardar la URL y la contraseña de Grafana en el archivo de conexiones
+echo "URL de Grafana: http://$GRAFANA_URL" >> connection_info.txt
+echo "Contraseña de Grafana: $GRAFANA_PASSWORD" >> connection_info.txt
 
 # Configurar port-forward para Prometheus (en segundo plano)
 kubectl port-forward -n monitoring svc/prometheus-server 9090:80 &
