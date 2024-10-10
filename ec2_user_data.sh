@@ -137,8 +137,7 @@ helm install prometheus prometheus-community/prometheus \
     --set server.persistentVolume.storageClass="gp2" \
     --set server.persistentVolume.size=20Gi
 
-echo "verificando prometheus"
-kubectl get all -n monitoring
+
 kubectl port-forward -n monitoring svc/prometheus-server 9090:80
 
 # Add Grafana Helm repository
@@ -153,14 +152,22 @@ helm install grafana grafana/grafana \
     --set adminPassword='adminPIN' \
     --set persistence.size=10Gi \
     --set service.type=LoadBalancer
-  
-# Obtener password Grafana
-echo "password Grafana: "
-kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
 
-echo "URL Grafana: "
-export ELB=$(kubectl get svc -n monitoring grafana -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+echo "verificando prometheus y grafana"
+kubectl get all -n monitoring
+
+# Obtener URL y password Grafana
+echo "Esperando que el LoadBalancer de Grafana esté listo..."
+while [ -z "$ELB" ]; do
+  sleep 10
+  ELB=$(kubectl get svc -n monitoring grafana -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+done
+
+echo "URL de Grafana:"
 echo "http://$ELB"
+
+echo "Contraseña de Grafana:"
+kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
 
 # Asegurarse de que las configuraciones estén disponibles para el usuario ubuntu
 mkdir -p /home/ubuntu/.kube

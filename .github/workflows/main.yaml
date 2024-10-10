@@ -111,7 +111,6 @@ jobs:
         name: ssh-key-and-info
         path: |
           jenkins.pem
-          connection_info.txt
 
   Conexion_EC2:
     needs: Deploy_CloudFormation
@@ -236,6 +235,22 @@ jobs:
         ')
         echo "kibana_url=http://$KIBANA_URL" >> $GITHUB_OUTPUT
 
+  Create_Connection_Info:
+    needs: [Deploy_CloudFormation, Deploy_Nginx, Deploy_EFK]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create connection info
+        run: |
+          echo "EC2 Public IP: ${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}" > connection_info.txt
+          echo "Nginx Service URL: ${{ needs.Deploy_Nginx.outputs.nginx_url }}" >> connection_info.txt
+          echo "Kibana URL: ${{ needs.Deploy_EFK.outputs.kibana_url }}" >> connection_info.txt     
+          echo "To connect via SSH: ssh -i jenkins.pem ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}" >> connection_info.txt
+
+      - name: Upload connection info
+        uses: actions/upload-artifact@v3
+        with:
+          name: connection-info
+          path: connection_info.txt
 
   Final_Setup:
     needs: [Deploy_Nginx, Deploy_EFK]
@@ -245,13 +260,6 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: connection-info
-
-      - name: Consolidate connection info
-        run: |
-          echo "EC2 Public IP: ${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}" > connection_info.txt
-          echo "Nginx Service URL: ${{ needs.Deploy_Nginx.outputs.nginx_url }}" >> connection_info.txt
-          echo "Kibana URL: ${{ needs.Deploy_EFK.outputs.kibana_url }}" >> connection_info.txt     
-          echo "To connect via SSH: ssh -i jenkins.pem ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}" >> connection_info.txt
 
       - name: Display final connection info
         run: cat connection_info.txt
