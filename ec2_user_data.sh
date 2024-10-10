@@ -130,14 +130,16 @@ helm version
 # Add Prometheus Helm repository
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
-helm upgrade -i prometheus prometheus-community/prometheus \
-  --namespace monitoring \
-  --set alertmanager.persistentVolume.storageClass="gp2" \
-  --set server.persistentVolume.storageClass="gp2" \
-  --set server.persistentVolume.size=20Gi
+helm install prometheus prometheus-community/prometheus \
+    --namespace monitoring \
+    --create-namespace \
+    --set alertmanager.persistentVolume.storageClass="gp2" \
+    --set server.persistentVolume.storageClass="gp2" \
+    --set server.persistentVolume.size=20Gi
 
 echo "verificando prometheus"
-kubectl get pods -n prometheus
+kubectl get all -n monitoring
+kubectl port-forward -n monitoring svc/prometheus-server 9090:80
 
 # Add Grafana Helm repository
 helm repo add grafana https://grafana.github.io/helm-charts
@@ -148,12 +150,17 @@ helm install grafana grafana/grafana \
     --namespace monitoring \
     --set persistence.storageClassName="gp2" \
     --set persistence.enabled=true \
+    --set adminPassword='adminPIN' \
     --set persistence.size=10Gi \
     --set service.type=LoadBalancer
   
 # Obtener password Grafana
 echo "password Grafana: "
 kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+
+echo "URL Grafana: "
+export ELB=$(kubectl get svc -n monitoring grafana -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+echo "http://$ELB"
 
 # Asegurarse de que las configuraciones estén disponibles para el usuario ubuntu
 mkdir -p /home/ubuntu/.kube
