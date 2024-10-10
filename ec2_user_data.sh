@@ -25,6 +25,22 @@ handle_error() {
     exit 1
 }
 
+# Función para verificar el estado de los pods
+check_pod_status() {
+    namespace=$1
+    echo "Verificando el estado de los pods en el namespace $namespace..."
+    kubectl get pods -n $namespace
+    
+    # Esperar hasta que todos los pods estén en estado Running o Completed
+    while [[ $(kubectl get pods -n $namespace -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}' | grep -v True) != "" ]]; do
+        echo "Esperando que todos los pods estén listos..."
+        sleep 10
+        kubectl get pods -n $namespace
+    done
+    
+    echo "Todos los pods están listos en el namespace $namespace."
+}
+
 # Actualizar el sistema
 log "Actualizando el sistema..."
 sudo apt-get update && sudo apt-get upgrade -y || handle_error "No se pudo actualizar el sistema"
@@ -118,7 +134,16 @@ if ! kubectl get nodes; then
     exit 1
 fi
 
-echo "Creando namespaces para monitoreo"
+# Verificar recursos disponibles
+echo "Verificando recursos disponibles en el cluster..."
+kubectl describe nodes | grep -A 5 "Allocated resources"
+
+# Verificar clases de almacenamiento
+echo "Verificando clases de almacenamiento disponibles..."
+kubectl get storageclass
+
+# Crear namespace para monitoreo
+echo "Creando namespace para monitoreo..."
 kubectl create namespace monitoring
 
 log "Configuración completada. El cluster EKS está listo para usar."
@@ -137,8 +162,9 @@ helm install prometheus prometheus-community/prometheus \
     --set server.persistentVolume.storageClass="gp2" \
     --set server.persistentVolume.size=20Gi
 
-
-kubectl port-forward -n monitoring svc/prometheus-server 9090:80
+# Esperar y verificar el estado de Prometheus
+sleep 60
+check_pod_status monitoring
 
 # Add Grafana Helm repository
 helm repo add grafana https://grafana.github.io/helm-charts
@@ -153,21 +179,39 @@ helm install grafana grafana/grafana \
     --set persistence.size=10Gi \
     --set service.type=LoadBalancer
 
-echo "verificando prometheus y grafana"
-kubectl get all -n monitoring
+# Esperar y verificar el estado de Grafana
+sleep 60
+check_pod_status monitoring
 
-# Obtener URL y password Grafana
-echo "Esperando que el LoadBalancer de Grafana esté listo..."
-while [ -z "$ELB" ]; do
-  sleep 10
-  ELB=$(kubectl get svc -n monitoring grafana -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+# Obtener URL y contraseña de Grafana
+echo "Obteniendo URL y contraseña de Grafana..."
+GRAFANA_PASSWORD=""
+GRAFANA_URL=""
+
+# Esperar hasta que el secreto de Grafana esté disponible
+while [ -z "$GRAFANA_PASSWORD" ]; do
+    echo "Esperando que el secreto de Grafana esté disponible..."
+    GRAFANA_PASSWORD=$(kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" 2>/dev/null | base64 --decode)
+    [ -z "$GRAFANA_PASSWORD" ] && sleep 10
 done
 
-echo "URL de Grafana:"
-echo "http://$ELB"
+# Esperar hasta que el LoadBalancer de Grafana esté listo
+while [ -z "$GRAFANA_URL" ]; do
+    echo "Esperando que el LoadBalancer de Grafana esté listo..."
+    GRAFANA_URL=$(kubectl get svc -n monitoring grafana -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+    [ -z "$GRAFANA_URL" ] && sleep 10
+done
 
-echo "Contraseña de Grafana:"
-kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+echo "URL de Grafana: http://$GRAFANA_URL"
+echo "Contraseña de Grafana: $GRAFANA_PASSWORD"
+
+# Configurar port-forward para Prometheus (en segundo plano)
+kubectl port-forward -n monitoring svc/prometheus-server 9090:80 &
+
+echo "Prometheus está disponible en http://localhost:9090"
+
+echo "verificando prometheus y grafana"
+kubectl get all -n monitoring
 
 # Asegurarse de que las configuraciones estén disponibles para el usuario ubuntu
 mkdir -p /home/ubuntu/.kube

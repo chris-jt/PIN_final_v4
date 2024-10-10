@@ -253,7 +253,7 @@ jobs:
           path: connection_info.txt
 
   Final_Setup:
-    needs: [Deploy_Nginx, Deploy_EFK]
+    needs: [Create_Connection_Info]
     runs-on: ubuntu-latest
     steps:
       - name: Download connection info
