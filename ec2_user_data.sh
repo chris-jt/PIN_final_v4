@@ -157,10 +157,10 @@ helm repo add prometheus-community https://prometheus-community.github.io/helm-c
 helm repo update
 helm install prometheus prometheus-community/prometheus \
     --namespace monitoring \
-    --create-namespace \
-    --set alertmanager.persistentVolume.storageClass="gp2" \
-    --set server.persistentVolume.storageClass="gp2" \
-    --set server.persistentVolume.size=20Gi
+    --set alertmanager.persistentVolume.enabled=false \
+    --set server.persistentVolume.enabled=false \
+    --set alertmanager.emptyDir.enabled=true \
+    --set server.emptyDir.enabled=true
 
 # Esperar y verificar el estado de Prometheus
 sleep 60
@@ -173,11 +173,13 @@ helm repo update
 # Installando Grafana
 helm install grafana grafana/grafana \
     --namespace monitoring \
-    --set persistence.storageClassName="gp2" \
-    --set persistence.enabled=true \
+    --set persistence.enabled=false \
     --set adminPassword='adminPIN' \
-    --set persistence.size=10Gi \
-    --set service.type=LoadBalancer
+    --set service.type=LoadBalancer \
+    --set volumes[0].name=storage \
+    --set volumes[0].emptyDir={} \
+    --set volumeMounts[0].name=storage \
+    --set volumeMounts[0].mountPath=/var/lib/grafana
 
 # Esperar y verificar el estado de Grafana
 sleep 60
