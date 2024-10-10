@@ -165,7 +165,7 @@ helm install prometheus prometheus-community/prometheus \
     --set server.resources.limits.memory=512Mi
 
 # Esperar y verificar el estado de Prometheus
-sleep 60
+sleep 30
 check_pod_status monitoring
 
 # Add Grafana Helm repository
@@ -184,7 +184,7 @@ helm install grafana grafana/grafana \
     --set volumeMounts[0].mountPath=/var/lib/grafana
 
 # Esperar y verificar el estado de Grafana
-sleep 60
+sleep 30
 check_pod_status monitoring
 
 # Obtener URL y contraseña de Grafana
