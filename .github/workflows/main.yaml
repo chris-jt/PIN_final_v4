@@ -263,6 +263,7 @@ jobs:
                 GRAFANA_PASSWORD=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP 'kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode')
                 echo "grafana_url=http://$GRAFANA_URL" >> $GITHUB_OUTPUT
                 echo "grafana_password=$GRAFANA_PASSWORD" >> $GITHUB_OUTPUT
+  
   Deploy_EFK:
     needs: [Deploy_CloudFormation, Conexion_EC2, Deploy_Nginx]
     runs-on: ubuntu-latest
@@ -296,7 +297,7 @@ jobs:
         echo "kibana_url=http://$KIBANA_URL" >> $GITHUB_OUTPUT
 
   Create_Connection_Info:
-    needs: [Deploy_CloudFormation, Deploy_Nginx, Deploy_EFK, Conexion_EC2]
+    needs: [Deploy_CloudFormation, Deploy_Nginx, Deploy_EFK, Conexion_EC2, Deploy_Monitoring]
     runs-on: ubuntu-latest
     steps:
       - name: Create connection info
@@ -305,8 +306,8 @@ jobs:
           EC2 Public IP: ${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
           Nginx Service URL: ${{ needs.Deploy_Nginx.outputs.nginx_url }}
           Kibana URL: ${{ needs.Deploy_EFK.outputs.kibana_url }}
-          URL de Grafana: ${{ needs.Conexion_EC2.outputs.grafana_url }}
-          Contraseña de Grafana: ${{ needs.Conexion_EC2.outputs.grafana_password }}
+          URL de Grafana: ${{ needs.eploy_Monitoring.outputs.grafana_url }}
+          Contraseña de Grafana: ${{ needs.eploy_Monitoring.outputs.grafana_password }}
           To connect via SSH: ssh -i jenkins.pem ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
           EOF
 
