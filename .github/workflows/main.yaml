@@ -79,6 +79,7 @@ jobs:
             InstanceType="${{ env.NODE_TYPE }}" \
             AMI="${{ env.AMI_ID }}" \
           --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
+      
       env:
         NODE_TYPE: ${{ env.NODE_TYPE }}
         AMI_ID: ${{ env.AMI_ID }}
