@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'CloudFormation template for Jenkins EC2 instance with EKS permissions'
+Description: 'CloudFormation template for Jenkins EC2 instance with EKS and EBS permissions'
 
 Parameters:
   KeyName:
@@ -38,6 +38,32 @@ Resources:
       KeyName: !Ref KeyName
       PublicKeyMaterial: !Ref PublicKeyMaterial
 
+  EBSPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Policy for EBS volume management
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:AttachVolume
+              - ec2:DetachVolume
+              - ec2:CreateSnapshot
+              - ec2:CreateTags
+              - ec2:CreateVolume
+              - ec2:DeleteSnapshot
+              - ec2:DeleteTags
+              - ec2:DeleteVolume
+              - ec2:DescribeAvailabilityZones
+              - ec2:DescribeInstances
+              - ec2:DescribeSnapshots
+              - ec2:DescribeTags
+              - ec2:DescribeVolumes
+              - ec2:DescribeVolumesModifications
+              - ec2:ModifyVolume
+            Resource: "*"
+
   JenkinsRole:
     Type: AWS::IAM::Role
     Properties:
@@ -53,6 +79,7 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
         - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess
         - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - !Ref EBSPolicy
 
   JenkinsInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -78,3 +105,6 @@ Outputs:
   EC2PublicIP:
     Description: Public IP address of the Jenkins instance
     Value: !GetAtt JenkinsInstance.PublicIp
+  JenkinsRoleArn:
+    Description: ARN of the Jenkins IAM Role
+    Value: !GetAtt JenkinsRole.Arn

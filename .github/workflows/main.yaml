@@ -78,7 +78,7 @@ jobs:
             PublicKeyMaterial="$(cat jenkins.pub)" \
             InstanceType="${{ env.NODE_TYPE }}" \
             AMI="${{ env.AMI_ID }}" \
-          --capabilities CAPABILITY_IAM
+          --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
       env:
         NODE_TYPE: ${{ env.NODE_TYPE }}
         AMI_ID: ${{ env.AMI_ID }}
@@ -131,7 +131,7 @@ jobs:
 
     - name: Configure AWS credentials on EC2
       run: |
-        ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} '
+        ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip  }} '
           mkdir -p ~/.aws
           echo "[default]
           aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -155,7 +155,7 @@ jobs:
           
         # Esperar a que el script termine (ajusta el tiempo según sea necesario)
         echo "Esperando que el script termine..."
-        sleep 600
+        sleep 1200  # Aumentado a 20 minutos
           
         # Verificar el estado del script
         ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} '
@@ -172,6 +172,14 @@ jobs:
         AWS_REGION: ${{ env.AWS_REGION }}
         NODE_TYPE: ${{ env.NODE_TYPE }}
         NODE_COUNT: ${{ env.NODE_COUNT }}
+
+    - name: Get Grafana Info
+      id: get_grafana_info
+      run: |
+        GRAFANA_URL=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} 'grep "URL de Grafana:" ~/connection_info.txt | cut -d" " -f4')
+        GRAFANA_PASSWORD=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} 'grep "Contraseña de Grafana:" ~/connection_info.txt | cut -d" " -f4')
+        echo "grafana_url=$GRAFANA_URL" >> $GITHUB_OUTPUT
+        echo "grafana_password=$GRAFANA_PASSWORD" >> $GITHUB_OUTPUT
 
   Deploy_Nginx:
     needs: [Deploy_CloudFormation, Conexion_EC2]
@@ -272,7 +280,6 @@ jobs:
         ')
         echo "kibana_url=http://$KIBANA_URL" >> $GITHUB_OUTPUT
 
-  
   Create_Connection_Info:
     needs: [Deploy_CloudFormation, Deploy_Nginx, Deploy_EFK, Conexion_EC2]
     runs-on: ubuntu-latest
@@ -283,7 +290,7 @@ jobs:
           EC2 Public IP: ${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
           Nginx Service URL: ${{ needs.Deploy_Nginx.outputs.nginx_url }}
           Kibana URL: ${{ needs.Deploy_EFK.outputs.kibana_url }}
-          URL de Grafana: http://${{ needs.Conexion_EC2.outputs.grafana_url }}
+          URL de Grafana: ${{ needs.Conexion_EC2.outputs.grafana_url }}
           Contraseña de Grafana: ${{ needs.Conexion_EC2.outputs.grafana_password }}
           To connect via SSH: ssh -i jenkins.pem ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
           EOF

@@ -78,7 +78,6 @@ curl -o aws-iam-authenticator https://amazon-eks.s3.us-west-2.amazonaws.com/1.21
 chmod +x ./aws-iam-authenticator
 sudo mv ./aws-iam-authenticator /usr/local/bin
 
-# Crear cluster EKS
 log "Creando cluster EKS..."
 eksctl create cluster \
   --name $CLUSTER_NAME  \
@@ -94,7 +93,10 @@ eksctl create cluster \
   --external-dns-access \
   --full-ecr-access \
   --appmesh-access \
-  --alb-ingress-access || handle_error "No se pudo crear el cluster EKS"
+  --alb-ingress-access \
+  --node-private-networking \
+  --node-iam-instance-profile NodeInstanceRole \
+  || handle_error "No se pudo crear el cluster EKS"
 
 # Configurar kubectl
 log "Configurando kubectl..."
@@ -127,7 +129,8 @@ helm install prometheus prometheus-community/prometheus \
     --namespace monitoring \
     --set alertmanager.persistentVolume.storageClass="gp2" \
     --set server.persistentVolume.storageClass="gp2" \
-    --set server.persistentVolume.size=20Gi || handle_error "No se pudo instalar Prometheus"
+    --set server.persistentVolume.size=20Gi \
+    --set server.retention=15d || handle_error "No se pudo instalar Prometheus"
 
 # Esperar que Prometheus esté listo
 log "Esperando que Prometheus esté listo..."
@@ -149,28 +152,24 @@ wait_for_command "kubectl get pods -n monitoring -l app.kubernetes.io/name=grafa
 
 # Obtener URL y contraseña de Grafana
 log "Obteniendo URL y contraseña de Grafana..."
-GRAFANA_PASSWORD=""
-GRAFANA_URL=""
+GRAFANA_PASSWORD=$(kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
+GRAFANA_URL=$(kubectl get svc -n monitoring grafana -o jsonpath="{.status.loadBalancer.ingress[0].hostname}")
 
-MAX_RETRIES=10
+# Esperar a que la URL de Grafana esté disponible
+MAX_RETRIES=20
 RETRY_INTERVAL=30
 for i in $(seq 1 $MAX_RETRIES); do
-  GRAFANA_URL=$(kubectl get svc -n monitoring grafana -o jsonpath="{.status.loadBalancer.ingress[0].hostname}")
   if [ ! -z "$GRAFANA_URL" ]; then
     break
   fi
   log "Intento $i: Esperando que la URL de Grafana esté disponible..."
   sleep $RETRY_INTERVAL
+  GRAFANA_URL=$(kubectl get svc -n monitoring grafana -o jsonpath="{.status.loadBalancer.ingress[0].hostname}")
 done
 
 if [ -z "$GRAFANA_URL" ]; then
   handle_error "No se pudo obtener la URL de Grafana después de $MAX_RETRIES intentos"
 fi
-
-GRAFANA_PASSWORD=$(kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
-
-log "URL de Grafana: http://$GRAFANA_URL"
-log "Contraseña de Grafana: $GRAFANA_PASSWORD"
 
 # Guardar la información de conexión
 echo "URL de Grafana: http://$GRAFANA_URL" >> ~/connection_info.txt
