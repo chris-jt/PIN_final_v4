@@ -171,7 +171,48 @@ jobs:
                 ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
                 kubectl wait --for=condition=available --timeout=300s deployment/nginx-deployment
                 '
-        
+                - name: Deploy Nginx
+                run: |
+                  EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
+                  # Copiar archivos al EC2        
+                  scp -i jenkins.pem -o StrictHostKeyChecking=no kubernetes/nginx-deployment.yaml kubernetes/nginx-service.yaml kubernetes/nginx-index-html-configmap.yaml ubuntu@$EC2_IP:~
+                 
+                  # Aplicar los archivos
+                  ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
+                  kubectl apply -f nginx-index-html-configmap.yaml
+                  kubectl apply -f nginx-deployment.yaml
+                  kubectl apply -f nginx-service.yaml
+          
+                  # Esperar a que el pod esté listo
+                  kubectl wait --for=condition=ready pod -l app=nginx --timeout=300s
+          
+                  # Verificar el estado del despliegue
+                  kubectl get deployments
+                  kubectl get pods
+                  kubectl get services
+                  '
+          
+      - name: Get Nginx Service URL
+        id: nginx-url
+        run: |
+          EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
+          NGINX_URL=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
+          kubectl get service nginx-service -o jsonpath="{.status.loadBalancer.ingress[0].hostname}"
+          ')
+          echo "nginx_url=http://$NGINX_URL" >> $GITHUB_OUTPUT
+            
+      - name: Save initial connection information
+        run: |
+          echo "EC2 Public IP: ${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}" > connection_info.txt
+          echo "Nginx Service URL: ${{ steps.nginx-url.outputs.nginx_url }}" >> connection_info.txt
+          echo "To connect via SSH: ssh -i jenkins.pem ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}" >> connection_info.txt
+          
+      - name: Upload initial connection info
+        uses: actions/upload-artifact@v3
+        with:
+          name: connection-info
+          path: connection_info.txt      
+  
   Deploy_EFK:
     needs: [Deploy_CloudFormation, Conexion_EC2, Deploy_Nginx]
     runs-on: ubuntu-latest
