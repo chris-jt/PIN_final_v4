@@ -155,7 +155,7 @@ jobs:
                  
           # Esperar a que el script termine (ajusta el tiempo según sea necesario)
             echo "Esperando que el script termine..."
-            sleep 600  # 10 minutos
+            sleep 300  # 5 minutos
                   
           # Verificar el estado del script
             ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} '
@@ -209,61 +209,6 @@ jobs:
                 kubectl wait --for=condition=available --timeout=300s deployment/nginx-deployment
                 '
         
-  Deploy_Monitoring:
-      needs: [Deploy_CloudFormation, Conexion_EC2, Deploy_Nginx]
-      runs-on: ubuntu-latest
-      outputs:
-        grafana_url: ${{ steps.grafana_info.outputs.grafana_url }}
-        grafana_password: ${{ steps.grafana_info.outputs.grafana_password }}
-      steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        
-      - name: Download SSH key
-        uses: actions/download-artifact@v3
-        with:
-          name: ssh-key
-        
-      - name: Set permissions for SSH key
-        run: chmod 600 jenkins.pem
-        
-      - name: Deploy Prometheus and Grafana
-        run: |
-                EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-                ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
-                kubectl create namespace monitoring
-                helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-                helm repo add grafana https://grafana.github.io/helm-charts
-                helm repo update
-                helm install prometheus prometheus-community/prometheus \
-                  --namespace monitoring \
-                  --set alertmanager.persistentVolume.storageClass="gp2" \
-                  --set server.persistentVolume.storageClass="gp2"
-                helm install grafana grafana/grafana \
-                  --namespace monitoring \
-                  --set persistence.storageClassName="gp2" \
-                  --set persistence.enabled=true \
-                  --set adminPassword="adminPIN" \
-                  --values grafana-values.yaml
-                '
-        
-      - name: Wait for Prometheus and Grafana
-        run: |
-                EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-                ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
-                kubectl wait --for=condition=available --timeout=300s deployment/prometheus-server -n monitoring
-                kubectl wait --for=condition=available --timeout=300s deployment/grafana -n monitoring
-                '
-        
-      - name: Get Grafana Info
-        id: grafana_info
-        run: |
-                EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-                GRAFANA_URL=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP 'kubectl get svc -n monitoring grafana -o jsonpath="{.status.loadBalancer.ingress[0].hostname}"')
-                GRAFANA_PASSWORD=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP 'kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode')
-                echo "grafana_url=http://$GRAFANA_URL" >> $GITHUB_OUTPUT
-                echo "grafana_password=$GRAFANA_PASSWORD" >> $GITHUB_OUTPUT
-  
   Deploy_EFK:
     needs: [Deploy_CloudFormation, Conexion_EC2, Deploy_Nginx]
     runs-on: ubuntu-latest
@@ -297,7 +242,7 @@ jobs:
         echo "kibana_url=http://$KIBANA_URL" >> $GITHUB_OUTPUT
 
   Create_Connection_Info:
-    needs: [Deploy_CloudFormation, Deploy_Nginx, Deploy_EFK, Conexion_EC2, Deploy_Monitoring]
+    needs: [Deploy_CloudFormation, Deploy_Nginx, Deploy_EFK, Conexion_EC2]
     runs-on: ubuntu-latest
     steps:
       - name: Create connection info
@@ -306,8 +251,6 @@ jobs:
           EC2 Public IP: ${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
           Nginx Service URL: ${{ needs.Deploy_Nginx.outputs.nginx_url }}
           Kibana URL: ${{ needs.Deploy_EFK.outputs.kibana_url }}
-          URL de Grafana: ${{ needs.eploy_Monitoring.outputs.grafana_url }}
-          Contraseña de Grafana: ${{ needs.eploy_Monitoring.outputs.grafana_password }}
           To connect via SSH: ssh -i jenkins.pem ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
           EOF
 

@@ -59,14 +59,23 @@ eksctl create cluster \
   --external-dns-access \
   --full-ecr-access \
   --appmesh-access \
-  --alb-ingress-access
+  --alb-ingress-access \
+  
 
 # Configurar kubectl
 log "Configurando kubectl..."
 aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
 
 # Instalar el CSI driver para EBS
-log "Instalando el CSI driver para EBS..."
-kubectl apply -k "github.com/kubernetes-sigs/aws-ebs-csi-driver/deploy/kubernetes/overlays/stable/?ref=master"
+# log "Instalando el CSI driver para EBS..."
+# kubectl apply -k "github.com/kubernetes-sigs/aws-ebs-csi-driver/deploy/kubernetes/overlays/stable/?ref=master"
+
+
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
+helm upgrade --install loki grafana/loki-stack --set grafana.enabled=true
+
+kubectl get secret --namespace default loki-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+kubectl port-forward --namespace default service/loki-grafana 3000:80
 
 log "Configuración del cluster EKS completada."
