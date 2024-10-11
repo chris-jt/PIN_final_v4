@@ -104,14 +104,6 @@ jobs:
         aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}
         region=${{ env.AWS_REGION }}" > ~/.aws/credentials
         '
-    - name: Get Grafana URL and Password
-      id: get_grafana_info
-      run: |     
-          GRAFANA_URL=$(kubectl get svc -n monitoring grafana -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-          GRAFANA_PASSWORD=$(kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode)   
-          echo "grafana_url=$GRAFANA_URL" >> $GITHUB_ENV      
-          echo "grafana_password=$GRAFANA_PASSWORD" >> $GITHUB_ENV
-
     - name: Upload SSH key and connection info
       uses: actions/upload-artifact@v3
       with:
