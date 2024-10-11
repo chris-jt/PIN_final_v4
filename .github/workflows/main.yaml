@@ -115,12 +115,10 @@ jobs:
   Conexion_EC2:
     needs: Deploy_CloudFormation
     runs-on: ubuntu-latest
-    outputs:
-      cluster_name: ${{ steps.cluster_info.outputs.cluster_name }}
-    steps:
+    steps:  
       - name: Checkout code
         uses: actions/checkout@v3
-    
+       
       - name: Download SSH key
         uses: actions/download-artifact@v3
         with:
@@ -129,50 +127,15 @@ jobs:
       - name: Set permissions for SSH key
         run: chmod 600 jenkins.pem
         
-      - name: Configure AWS credentials on EC2
-        run: |
-          ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} '
-          mkdir -p ~/.aws
-          echo "[default]
-          aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          region=${{ env.AWS_REGION }}" > ~/.aws/credentials
-          '
-        
       - name: Connect to EC2 and setup cluster
         run: |
-          # Instalar tmux en la instancia EC2
-          ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} 'sudo apt-get update && sudo apt-get install -y tmux'
-                  
-          # Copiar el script a la instancia EC2
-          scp -i jenkins.pem -o StrictHostKeyChecking=no ec2_user_data.sh ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}:~/ec2_user_data.sh
-                
-          # Ejecutar el script en una sesión tmux
-            ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} '
-            chmod +x ~/ec2_user_data.sh
-            tmux new-session -d -s setup_session "sudo -E ~/ec2_user_data.sh > ~/setup.log 2>&1"
-            '
-                 
-          # Esperar a que el script termine (ajusta el tiempo según sea necesario)
-            echo "Esperando que el script termine..."
-            sleep 300  # 5 minutos
-                  
-          # Verificar el estado del script
-            ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} '
-            if tmux has-session -t setup_session 2>/dev/null; then
-              echo "El script aún está en ejecución"
-            exit 1
-            else
-              echo "El script ha terminado"
-              cat ~/setup.log
-            fi
-            '
+          ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} 'bash -s' < ec2_user_data.sh
         env:
-          CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
-          AWS_REGION: ${{ env.AWS_REGION }}
-          NODE_TYPE: ${{ env.NODE_TYPE }}
-          NODE_COUNT: ${{ env.NODE_COUNT }}
-        
+                CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
+                AWS_REGION: ${{ env.AWS_REGION }}
+                NODE_TYPE: ${{ env.NODE_TYPE }}
+                NODE_COUNT: ${{ env.NODE_COUNT }}
+
       - name: Get cluster info
         id: cluster_info
         run: |

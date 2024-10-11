@@ -82,12 +82,12 @@ eksctl create cluster \
   --nodes $NODE_COUNT \
   --nodes-min 1 \
   --nodes-max 4 \
-  --managed \
-  --asg-access \
-  --external-dns-access \
-  --full-ecr-access \
-  --appmesh-access \
-  --alb-ingress-access \
+  # --managed \
+  # --asg-access \
+  # --external-dns-access \
+  # --full-ecr-access \
+  # --appmesh-access \
+  # --alb-ingress-access \
   
 # Configurar kubectl
 log "Configurando kubectl..."
