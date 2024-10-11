@@ -156,7 +156,7 @@ jobs:
           
         # Esperar a que el script termine (ajusta el tiempo según sea necesario)
         echo "Esperando que el script termine..."
-        sleep 1200  # Aumentado a 20 minutos
+        sleep 600  # Aumentado a 10 minutos
           
         # Verificar el estado del script
         ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} '
