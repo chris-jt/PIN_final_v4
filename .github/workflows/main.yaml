@@ -116,139 +116,153 @@ jobs:
     needs: Deploy_CloudFormation
     runs-on: ubuntu-latest
     outputs:
-      grafana_url: ${{ steps.get_grafana_info.outputs.grafana_url }}
-      grafana_password: ${{ steps.get_grafana_info.outputs.grafana_password }}
-    steps:  
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Download SSH key
-      uses: actions/download-artifact@v3
-      with:
-        name: ssh-key
-
-    - name: Set permissions for SSH key
-      run: chmod 600 jenkins.pem
-
-    - name: Configure AWS credentials on EC2
-      run: |
-        ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip  }} '
+      cluster_name: ${{ steps.cluster_info.outputs.cluster_name }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+    
+      - name: Download SSH key
+        uses: actions/download-artifact@v3
+        with:
+          name: ssh-key
+        
+      - name: Set permissions for SSH key
+        run: chmod 600 jenkins.pem
+        
+      - name: Configure AWS credentials on EC2
+        run: |
+          ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} '
           mkdir -p ~/.aws
           echo "[default]
           aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}
           region=${{ env.AWS_REGION }}" > ~/.aws/credentials
-        '
-
-    - name: Connect to EC2 and setup cluster
-      run: |
-        # Instalar tmux en la instancia EC2
-        ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} 'sudo apt-get update && sudo apt-get install -y tmux'
-          
-        # Copiar el script a la instancia EC2
-        scp -i jenkins.pem -o StrictHostKeyChecking=no ec2_user_data.sh ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}:~/ec2_user_data.sh
-         
-        # Ejecutar el script en una sesión tmux
-        ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} '
-        chmod +x ~/ec2_user_data.sh
-        tmux new-session -d -s setup_session "sudo -E ~/ec2_user_data.sh > ~/setup.log 2>&1"
-        '
-          
-        # Esperar a que el script termine (ajusta el tiempo según sea necesario)
-        echo "Esperando que el script termine..."
-        sleep 600  # Aumentado a 10 minutos
-          
-        # Verificar el estado del script
-        ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} '
-        if tmux has-session -t setup_session 2>/dev/null; then
-          echo "El script aún está en ejecución"
-          exit 1
-        else
-          echo "El script ha terminado"
-          cat ~/setup.log
-        fi
-        '
-      env:
-        CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
-        AWS_REGION: ${{ env.AWS_REGION }}
-        NODE_TYPE: ${{ env.NODE_TYPE }}
-        NODE_COUNT: ${{ env.NODE_COUNT }}
-
-    - name: Get Grafana Info
-      id: get_grafana_info
-      run: |
-        GRAFANA_URL=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} 'grep "URL de Grafana:" ~/connection_info.txt | cut -d" " -f4')
-        GRAFANA_PASSWORD=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} 'grep "Contraseña de Grafana:" ~/connection_info.txt | cut -d" " -f4')
-        echo "grafana_url=$GRAFANA_URL" >> $GITHUB_OUTPUT
-        echo "grafana_password=$GRAFANA_PASSWORD" >> $GITHUB_OUTPUT
-
-  Deploy_Nginx:
-    needs: [Deploy_CloudFormation, Conexion_EC2]
-    runs-on: ubuntu-latest
-    outputs:
-      nginx_url: ${{ steps.nginx-url.outputs.nginx_url }}
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Download SSH key
-      uses: actions/download-artifact@v3
-      with:
-        name: ssh-key
-
-    - name: Set permissions for SSH key
-      run: chmod 600 jenkins.pem
-
-    - name: Configure kubectl on EC2
-      run: |
-        EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-        ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
-        aws eks update-kubeconfig --name ${{ env.CLUSTER_NAME }} --region ${{ env.AWS_REGION }} && \
-        kubectl get nodes'
-
-    - name: Copy Kubernetes files to EC2
-      run: |
-        EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-        scp -i jenkins.pem -o StrictHostKeyChecking=no kubernetes/nginx-deployment.yaml kubernetes/nginx-service.yaml kubernetes/nginx-index-html-configmap.yaml ubuntu@$EC2_IP:~
+          '
         
-    - name: Apply Kubernetes configurations
-      run: |
-        EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-        ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
-        kubectl apply -f nginx-index-html-configmap.yaml && \
-        kubectl apply -f nginx-deployment.yaml && \
-        kubectl apply -f nginx-service.yaml'
-  
-    - name: Check node status
-      run: |
-        EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-        ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
-        kubectl get nodes
-        kubectl describe nodes'
-
-    - name: Check Nginx deployment
-      run: |
-        EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-        ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
-        kubectl get deployments
-        kubectl describe deployment nginx-deployment
-        kubectl get events --sort-by=.metadata.creationTimestamp'
-
-    - name: Wait for Nginx pod to be ready
-      run: |
-        EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-        ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
-        kubectl wait --for=condition=ready pod -l app=nginx --timeout=300s'
-    
-    - name: Get Nginx Service URL
-      id: nginx-url
-      run: |
-        EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-        NGINX_URL=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@$EC2_IP '
-        kubectl get service nginx-service -o jsonpath="{.status.loadBalancer.ingress[0].hostname}"
-        ')
-        echo "nginx_url=http://$NGINX_URL" >> $GITHUB_OUTPUT
-
+      - name: Connect to EC2 and setup cluster
+        run: |
+          # Instalar tmux en la instancia EC2
+          ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} 'sudo apt-get update && sudo apt-get install -y tmux'
+                  
+          # Copiar el script a la instancia EC2
+          scp -i jenkins.pem -o StrictHostKeyChecking=no ec2_user_data.sh ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}:~/ec2_user_data.sh
+                
+          # Ejecutar el script en una sesión tmux
+            ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} '
+            chmod +x ~/ec2_user_data.sh
+            tmux new-session -d -s setup_session "sudo -E ~/ec2_user_data.sh > ~/setup.log 2>&1"
+            '
+                 
+          # Esperar a que el script termine (ajusta el tiempo según sea necesario)
+            echo "Esperando que el script termine..."
+            sleep 600  # 10 minutos
+                  
+          # Verificar el estado del script
+            ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} '
+            if tmux has-session -t setup_session 2>/dev/null; then
+              echo "El script aún está en ejecución"
+            exit 1
+            else
+              echo "El script ha terminado"
+              cat ~/setup.log
+            fi
+            '
+        env:
+          CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+          NODE_TYPE: ${{ env.NODE_TYPE }}
+          NODE_COUNT: ${{ env.NODE_COUNT }}
+        
+      - name: Get cluster info
+        id: cluster_info
+        run: |
+          CLUSTER_NAME=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} 'echo $CLUSTER_NAME')
+          echo "cluster_name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
+        
+  Deploy_Nginx:
+      needs: [Deploy_CloudFormation, Conexion_EC2]
+      runs-on: ubuntu-latest
+      steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Download SSH key
+        uses: actions/download-artifact@v3
+        with:
+          name: ssh-key
+        
+      - name: Set permissions for SSH key
+        run: chmod 600 jenkins.pem
+        
+      - name: Deploy Nginx
+        run: |
+                EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
+                ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
+                kubectl apply -f ~/nginx-deployment.yaml
+                kubectl apply -f ~/nginx-service.yaml
+                '
+        
+      - name: Wait for Nginx deployment
+        run: |
+                EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
+                ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
+                kubectl wait --for=condition=available --timeout=300s deployment/nginx-deployment
+                '
+        
+  Deploy_Monitoring:
+      needs: [Deploy_CloudFormation, Conexion_EC2, Deploy_Nginx]
+      runs-on: ubuntu-latest
+      outputs:
+        grafana_url: ${{ steps.grafana_info.outputs.grafana_url }}
+        grafana_password: ${{ steps.grafana_info.outputs.grafana_password }}
+      steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Download SSH key
+        uses: actions/download-artifact@v3
+        with:
+          name: ssh-key
+        
+      - name: Set permissions for SSH key
+        run: chmod 600 jenkins.pem
+        
+      - name: Deploy Prometheus and Grafana
+        run: |
+                EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
+                ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
+                kubectl create namespace monitoring
+                helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+                helm repo add grafana https://grafana.github.io/helm-charts
+                helm repo update
+                helm install prometheus prometheus-community/prometheus \
+                  --namespace monitoring \
+                  --set alertmanager.persistentVolume.storageClass="gp2" \
+                  --set server.persistentVolume.storageClass="gp2"
+                helm install grafana grafana/grafana \
+                  --namespace monitoring \
+                  --set persistence.storageClassName="gp2" \
+                  --set persistence.enabled=true \
+                  --set adminPassword="adminPIN" \
+                  --values grafana-values.yaml
+                '
+        
+      - name: Wait for Prometheus and Grafana
+        run: |
+                EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
+                ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
+                kubectl wait --for=condition=available --timeout=300s deployment/prometheus-server -n monitoring
+                kubectl wait --for=condition=available --timeout=300s deployment/grafana -n monitoring
+                '
+        
+      - name: Get Grafana Info
+        id: grafana_info
+        run: |
+                EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
+                GRAFANA_URL=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP 'kubectl get svc -n monitoring grafana -o jsonpath="{.status.loadBalancer.ingress[0].hostname}"')
+                GRAFANA_PASSWORD=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP 'kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode')
+                echo "grafana_url=http://$GRAFANA_URL" >> $GITHUB_OUTPUT
+                echo "grafana_password=$GRAFANA_PASSWORD" >> $GITHUB_OUTPUT
   Deploy_EFK:
     needs: [Deploy_CloudFormation, Conexion_EC2, Deploy_Nginx]
     runs-on: ubuntu-latest
