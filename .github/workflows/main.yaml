@@ -9,6 +9,7 @@ env:
   NODE_TYPE: t3.medium
   NODE_COUNT: 2
   AMI_ID: ami-0261755bbcb8c4a84  # AMI ID for Ubuntu 20.04 LTS in us-east-1
+  GRAFANA_ADMIN_PASSWORD: adminPIN 
 
 jobs:
   Credenciales:
@@ -133,12 +134,12 @@ jobs:
         
       - name: Connect to EC2 and setup cluster
         run: |
-          ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} 'bash -s' < ec2_user_data.sh
-        env:
-                CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
-                AWS_REGION: ${{ env.AWS_REGION }}
-                NODE_TYPE: ${{ env.NODE_TYPE }}
-                NODE_COUNT: ${{ env.NODE_COUNT }}
+          ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} \
+          'CLUSTER_NAME=${{ env.CLUSTER_NAME }} \
+          AWS_REGION=${{ env.AWS_REGION }} \
+          NODE_TYPE=${{ env.NODE_TYPE }} \
+          NODE_COUNT=${{ env.NODE_COUNT }} \
+          GRAFANA_ADMIN_PASSWORD=${{ env.GRAFANA_ADMIN_PASSWORD }} bash -s' < ec2_user_data.sh
 
       - name: Get cluster info
         id: cluster_info

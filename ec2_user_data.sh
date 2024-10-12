@@ -2,11 +2,12 @@
 set -x
 
 # Variables de entorno
-export CLUSTER_NAME=${CLUSTER_NAME:-"cluster-PIN"}
-export AWS_REGION=${AWS_REGION:-"us-east-1"}
-export NODE_TYPE=${NODE_TYPE:-"t3.medium"}
-export NODE_COUNT=${NODE_COUNT:-3}
-export GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-"adminPIN"}
+# Acceder a las variables de entorno
+echo "Cluster Name: $CLUSTER_NAME"
+echo "AWS Region: $AWS_REGION"
+echo "Node Type: $NODE_TYPE"
+echo "Node Count: $NODE_COUNT"
+echo "Grafana Password: $GRAFANA_ADMIN_PASSWORD"
 
 # Función para esperar a que apt esté disponible
 wait_for_apt() {
