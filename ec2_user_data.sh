@@ -147,12 +147,31 @@ helm repo add grafana https://grafana.github.io/helm-charts
 helm repo update
 helm upgrade --install loki grafana/loki-stack \
   --set grafana.enabled=true \
-  --set grafana.service.type=LoadBalancer
+  --set grafana.service.type=LoadBalancer \
+  --timeout 10m
 
-kubectl port-forward --namespace default service/loki-grafana 3000:80
+echo "Waiting for Grafana pod to be ready..."
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana --timeout=600s
 
-echo "Waiting for LoadBalancer to be ready..."
-kubectl wait --for=condition=ready service loki-grafana --timeout=300s
+echo "Waiting for Grafana service to get an external IP..."
+for i in {1..30}; do
+  GRAFANA_IP=$(kubectl get svc loki-grafana -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  if [ -n "$GRAFANA_IP" ]; then
+    echo "Grafana LoadBalancer IP: $GRAFANA_IP"
+    break
+  fi
+  echo "Waiting for LoadBalancer IP... (attempt $i/30)"
+  sleep 10
+done
+
+if [ -z "$GRAFANA_IP" ]; then
+  echo "Failed to get LoadBalancer IP for Grafana"
+  echo "Current service status:"
+  kubectl get svc loki-grafana -o yaml
+  echo "Pod status:"
+  kubectl get pods -l app.kubernetes.io/name=grafana
+  exit 1
+fi
 
 GRAFANA_URL=$(kubectl get service loki-grafana -o jsonpath="{.status.loadBalancer.ingress[0].hostname}")
 GRAFANA_PASSWORD=$(kubectl get secret loki-grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
