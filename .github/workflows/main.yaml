@@ -275,7 +275,7 @@ jobs:
           path: connection_info.txt
 
   Download_Kubeconfig:
-    needs: [Deploy_CloudFormation, Conexion_EC2, Deploy_Nginx]
+    needs: [Deploy_CloudFormation, Conexion_EC2]
     runs-on: ubuntu-latest
     steps:
     - name: Download SSH key
