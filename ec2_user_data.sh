@@ -150,33 +150,33 @@ helm upgrade --install loki grafana/loki-stack \
   --set grafana.service.type=LoadBalancer \
   --timeout 10m
 
-echo "Waiting for Grafana pod to be ready..."
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana --timeout=300s
+# echo "Waiting for Grafana pod to be ready..."
+# kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana --timeout=300s
 
 # echo "Waiting for Grafana service to get an external address..."
-# for i in {1..30}; do
-#   GRAFANA_ADDRESS=$(kubectl get svc loki-grafana -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-#   if [ -z "$GRAFANA_ADDRESS" ]; then
-#     GRAFANA_ADDRESS=$(kubectl get svc loki-grafana -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-#   fi
-#   if [ -n "$GRAFANA_ADDRESS" ]; then
-#     echo "Grafana LoadBalancer address: $GRAFANA_ADDRESS"
-#     break
-#   fi
-#   echo "Waiting for LoadBalancer address... (attempt $i/30)"
-#   sleep 10
-# done
+for i in {1..30}; do
+  GRAFANA_URL=$(kubectl get svc loki-grafana -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  if [ -z "$GRAFANA_URL" ]; then
+    GRAFANA_URL=$(kubectl get svc loki-grafana -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+  fi
+  if [ -n "$GRAFANA_URL" ]; then
+    echo "Grafana LoadBalancer address: $GRAFANA_URL"
+    break
+  fi
+  echo "Waiting for LoadBalancer address... (attempt $i/30)"
+  sleep 10
+done
 
-# if [ -z "$GRAFANA_ADDRESS" ]; then
-#   echo "Failed to get LoadBalancer address for Grafana"
-#   echo "Current service status:"
-#   kubectl get svc loki-grafana -o yaml
-#   echo "Pod status:"
-#   kubectl get pods -l app.kubernetes.io/name=grafana
-#   exit 1
-# fi
+if [ -z "$GRAFANA_URL" ]; then
+  echo "Failed to get LoadBalancer address for Grafana"
+  echo "Current service status:"
+  kubectl get svc loki-grafana -o yaml
+  echo "Pod status:"
+  kubectl get pods -l app.kubernetes.io/name=grafana
+  exit 1
+fi
 
-GRAFANA_URL=$(kubectl get service loki-grafana -o jsonpath="{.status.loadBalancer.ingress[0].hostname}")
+#GRAFANA_URL=$(kubectl get service loki-grafana -o jsonpath="{.status.loadBalancer.ingress[0].hostname}")
 GRAFANA_PASSWORD=$(kubectl get secret loki-grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
 
 echo "Grafana URL: http://$GRAFANA_URL"
