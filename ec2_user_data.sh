@@ -6,6 +6,7 @@ export CLUSTER_NAME=${CLUSTER_NAME:-"cluster-PIN"}
 export AWS_REGION=${AWS_REGION:-"us-east-1"}
 export NODE_TYPE=${NODE_TYPE:-"t3.medium"}
 export NODE_COUNT=${NODE_COUNT:-3}
+export GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-"adminPIN"}
 
 # Función para esperar a que apt esté disponible
 wait_for_apt() {
@@ -123,7 +124,9 @@ fi
 echo "Configuración completada. El cluster EKS está listo para usar."
 
 echo "Installing Helm"
-curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+if ! curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash; then
+    handle_error "Failed to install Helm"
+fi
 helm version
 
 # Instalar el CSI driver para EBS
@@ -148,7 +151,7 @@ helm repo update
 helm upgrade --install loki grafana/loki-stack \
   --set grafana.enabled=true \
   --set grafana.service.type=LoadBalancer \
-  --set grafana.adminPassword=adminPIN \
+  --set grafana.adminPassword=$GRAFANA_ADMIN_PASSWORD \
   --timeout 10m
 
 # echo "Waiting for Grafana pod to be ready..."
