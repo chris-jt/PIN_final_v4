@@ -151,7 +151,7 @@ helm upgrade --install loki grafana/loki-stack \
   --timeout 10m
 
 echo "Waiting for Grafana pod to be ready..."
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana --timeout=600s
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana --timeout=300s
 
 # echo "Waiting for Grafana service to get an external address..."
 # for i in {1..30}; do
