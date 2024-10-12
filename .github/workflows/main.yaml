@@ -159,12 +159,6 @@ jobs:
       - name: Set permissions for SSH key
         run: chmod 600 jenkins.pem
         
-      - name: Wait for Nginx deployment
-        run: |
-                EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-                ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
-                kubectl wait --for=condition=available --timeout=300s deployment/nginx-deployment
-                '
       - name: Deploy Nginx
         run: |
             EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
