@@ -7,7 +7,7 @@ env:
   AWS_REGION: us-east-1
   CLUSTER_NAME: cluster-PIN 
   NODE_TYPE: t3.medium
-  NODE_COUNT: 2
+  NODE_COUNT: 3
   AMI_ID: ami-0261755bbcb8c4a84  # AMI ID for Ubuntu 20.04 LTS in us-east-1
   GRAFANA_ADMIN_PASSWORD: adminPIN 
 
