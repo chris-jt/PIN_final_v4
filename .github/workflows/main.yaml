@@ -157,40 +157,32 @@ jobs:
       - name: Set permissions for SSH key
         run: chmod 600 jenkins.pem
         
-      - name: Deploy Nginx
-        run: |
-                EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-                ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
-                kubectl apply -f ~/nginx-deployment.yaml
-                kubectl apply -f ~/nginx-service.yaml
-                '
-        
       - name: Wait for Nginx deployment
         run: |
                 EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
                 ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
                 kubectl wait --for=condition=available --timeout=300s deployment/nginx-deployment
                 '
-                - name: Deploy Nginx
-                run: |
-                  EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
-                  # Copiar archivos al EC2        
-                  scp -i jenkins.pem -o StrictHostKeyChecking=no kubernetes/nginx-deployment.yaml kubernetes/nginx-service.yaml kubernetes/nginx-index-html-configmap.yaml ubuntu@$EC2_IP:~
-                 
-                  # Aplicar los archivos
-                  ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
-                  kubectl apply -f nginx-index-html-configmap.yaml
-                  kubectl apply -f nginx-deployment.yaml
-                  kubectl apply -f nginx-service.yaml
+      - name: Deploy Nginx
+        run: |
+            EC2_IP=${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
+            # Copiar archivos al EC2        
+            scp -i jenkins.pem -o StrictHostKeyChecking=no kubernetes/nginx-deployment.yaml kubernetes/nginx-service.yaml kubernetes/nginx-index-html-configmap.yaml ubuntu@$EC2_IP:~
+                
+            # Aplicar los archivos
+            ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP '
+            kubectl apply -f nginx-index-html-configmap.yaml
+            kubectl apply -f nginx-deployment.yaml
+            kubectl apply -f nginx-service.yaml
           
-                  # Esperar a que el pod esté listo
-                  kubectl wait --for=condition=ready pod -l app=nginx --timeout=300s
+            # Esperar a que el pod esté listo
+            kubectl wait --for=condition=ready pod -l app=nginx --timeout=300s
           
-                  # Verificar el estado del despliegue
-                  kubectl get deployments
-                  kubectl get pods
-                  kubectl get services
-                  '
+            # Verificar el estado del despliegue
+            kubectl get deployments
+            kubectl get pods
+            kubectl get services
+            '
           
       - name: Get Nginx Service URL
         id: nginx-url
