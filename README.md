@@ -32,7 +32,7 @@ Este proyecto implementa un pipeline de CI/CD para desplegar una instancia EC2 e
 4. Se crea un cluster EKS en AWS.
 5. Se despliega un pod de Nginx con una página personalizada.
 6. Se despliega el stack EFK (Elasticsearch, Fluentd, Kibana) para monitoreo de logs.
-7. Se despliega Prometheus y Grafana para métricas y visualización.
+7. Se despliega Loki y Grafana para métricas y visualización.
 
 ## Acceso a la Instancia EC2
 
@@ -156,7 +156,7 @@ Verificar que Elasticsearch esté recibiendo datos:
 - Ir a "Stack Management" > "Rules and Connectors".
 - Crear una nueva regla basada en los logs de Nginx para recibir alertas sobre eventos específicos.
 
-## Configuración y uso de Grafana con Prometheus para monitoreo del cloud y los pods
+## Configuración y uso de Grafana para monitoreo del cloud y los pods
 
 1. Acceso a Grafana:
 
@@ -167,15 +167,15 @@ Verificar que Elasticsearch esté recibiendo datos:
 ### Configuración de Prometheus como fuente de datos:
 
 1. En el menú lateral de Grafana, vaya a "Configuration" > "Data Sources".
-2. Haga clic en "Add data source" y seleccione "Prometheus".
+2. Haga clic en "Add data source" y seleccione "Loki".
 3. En el campo "URL", ingrese la URL de Prometheus (http://`<EC2_IP>`:8080).
 4. Haga clic en "Save & Test" para verificar la conexión.
 
 ### Importación de dashboards predefinidos:
 
 1. En el menú lateral, vaya a "Create" > "Import".
-2. Ingrese el ID 3119 para importar un dashboard de Kubernetes cluster monitoring.
-3. Seleccione Prometheus como la fuente de datos y haga clic en "Import".
+2. Ingrese el ID '' para importar un dashboard de Kubernetes cluster monitoring.
+3. Seleccione Loki como la fuente de datos y haga clic en "Import".
 
 ### Creación de un dashboard personalizado para el pod de Nginx:
 
@@ -195,20 +195,6 @@ Verificar que Elasticsearch esté recibiendo datos:
 1. Importe el dashboard con ID 315 para monitoreo de nodos de Kubernetes.
 2. Este dashboard proporcionará información sobre el uso de recursos a nivel de nodo.
 
-### Configuración de la retención de datos:
-
-1. En la instancia EC2, edite el archivo de configuración de Prometheus (`/etc/prometheus/prometheus.yml`).
-2. Agregue o modifique la línea `storage.tsdb.retention.time: 15d` para establecer la retención de datos a 15 días (ajuste según sus necesidades).
-
-### Exploración de métricas:
-
-1. Use el explorador de métricas de Grafana para descubrir y graficar métricas adicionales específicas de su aplicación y entorno.
-
-### Configuración de notificaciones:
-
-1. En Grafana, vaya a "Alerting" > "Notification channels".
-2. Configure canales de notificación como email, Slack, o PagerDuty para recibir alertas.
-
 ## Limpieza de recursos en AWS
 
 Para limpiar todos los recursos generados en AWS, ejecuta los siguientes comandos:
@@ -216,7 +202,6 @@ Para limpiar todos los recursos generados en AWS, ejecuta los siguientes comando
 1. Eliminar el cluster EKS:
 
     eksctl delete cluster --name cluster-PIN --region us-east-1
-
 
 2. Eliminar el stack de CloudFormation:
 
