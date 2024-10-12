@@ -19,7 +19,7 @@ wait_for_apt() {
 # Función para logging
 log() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >> /path/to/logfile.log
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >> /home/ubuntu/logfile.log
 }
 
 # Función para manejar errores
@@ -172,9 +172,6 @@ GRAFANA_PASSWORD=$(kubectl get secret loki-grafana -o jsonpath="{.data.admin-pas
 log "Verificando el estado de Loki"
 kubectl get pods -l app=loki
 kubectl get svc -l app=loki
-
-log "Verificando la configuración de la fuente de datos de Loki"
-kubectl get configmap loki-grafana-datasource -o yaml
 
 log "Grafana URL: http://$GRAFANA_URL"
 log "Grafana admin password: $GRAFANA_PASSWORD"
