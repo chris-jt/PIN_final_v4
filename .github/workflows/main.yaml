@@ -115,6 +115,10 @@ jobs:
   Conexion_EC2:
     needs: Deploy_CloudFormation
     runs-on: ubuntu-latest
+    outputs:
+      cluster_name: ${{ steps.cluster_info.outputs.cluster_name }}
+      grafana_url: ${{ steps.grafana_info.outputs.grafana_url }}
+      grafana_password: ${{ steps.grafana_info.outputs.grafana_password }}
     steps:  
       - name: Checkout code
         uses: actions/checkout@v3
@@ -142,6 +146,29 @@ jobs:
           CLUSTER_NAME=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} 'echo $CLUSTER_NAME')
           echo "cluster_name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
         
+          - name: Wait for Grafana LoadBalancer
+          run: |
+            ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} '
+            kubectl wait --for=condition=ready service loki-grafana --timeout=300s
+            '
+    
+      - name: Get Grafana info
+        id: grafana_info
+        run: |
+            GRAFANA_URL=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} '
+            kubectl get service loki-grafana -o jsonpath="{.status.loadBalancer.ingress[0].hostname}"
+            ')
+            GRAFANA_PASSWORD=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} '
+            kubectl get secret loki-grafana -o jsonpath="{.data.admin-password}" | base64 --decode
+            ')
+            echo "grafana_url=http://$GRAFANA_URL" >> $GITHUB_OUTPUT
+            echo "grafana_password=$GRAFANA_PASSWORD" >> $GITHUB_OUTPUT
+    
+      - name: Display Grafana info
+        run: |
+            echo "Grafana URL: ${{ steps.grafana_info.outputs.grafana_url }}"
+            echo "Grafana admin password: ${{ steps.grafana_info.outputs.grafana_password }}"
+
   Deploy_Nginx:
       needs: [Deploy_CloudFormation, Conexion_EC2]
       runs-on: ubuntu-latest
@@ -243,6 +270,8 @@ jobs:
           EC2 Public IP: ${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
           Nginx Service URL: ${{ needs.Deploy_Nginx.outputs.nginx_url }}
           Kibana URL: ${{ needs.Deploy_EFK.outputs.kibana_url }}
+          Grafana URL: ${{ needs.Conexion_EC2.outputs.grafana_url }}
+          Grafana admin password: ${{ needs.Conexion_EC2.outputs.grafana_password }}
           To connect via SSH: ssh -i jenkins.pem ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }}
           EOF
 

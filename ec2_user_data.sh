@@ -142,12 +142,23 @@ source /home/ubuntu/.bashrc
 
 aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
 
+echo "Installing Loki"
 helm repo add grafana https://grafana.github.io/helm-charts
 helm repo update
-helm upgrade --install loki grafana/loki-stack --set grafana.enabled=true
+helm upgrade --install loki grafana/loki-stack \
+  --set grafana.enabled=true \
+  --set grafana.service.type=LoadBalancer
 
-kubectl get secret --namespace default loki-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
 kubectl port-forward --namespace default service/loki-grafana 3000:80
+
+echo "Waiting for LoadBalancer to be ready..."
+kubectl wait --for=condition=ready service loki-grafana --timeout=300s
+
+GRAFANA_URL=$(kubectl get service loki-grafana -o jsonpath="{.status.loadBalancer.ingress[0].hostname}")
+GRAFANA_PASSWORD=$(kubectl get secret loki-grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
+
+echo "Grafana URL: http://$GRAFANA_URL"
+echo "Grafana admin password: $GRAFANA_PASSWORD"
 
 log "Configuración del cluster EKS completada."
 echo "All necessary tools have been installed and cluster is ready."
