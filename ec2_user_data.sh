@@ -18,7 +18,8 @@ wait_for_apt() {
 }
 # Función para logging
 log() {
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >> /path/to/logfile.log
 }
 
 # Función para manejar errores
@@ -91,20 +92,16 @@ eksctl create cluster \
   # --appmesh-access \
   # --alb-ingress-access \
   
-# Configurar kubectl
 log "Configurando kubectl..."
-
-echo "Configurando kubectl para el nuevo cluster..."
+log "Configurando kubectl para el nuevo cluster..."
 if ! aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION; then
-    echo "Error al actualizar kubeconfig"
+    log "Error al actualizar kubeconfig"
     exit 1
 fi
-
-echo "Contenido de kubeconfig:"
-cat ~/.kube/config
-
-echo "Versión de kubectl:"
-kubectl version --client
+log "Contenido de kubeconfig:"
+cat ~/.kube/config | while read line; do log "$line"; done
+log "Versión de kubectl:"
+kubectl version --client | while read line; do log "$line"; done
 
 # Verificar que los nodos estén listos
 log "Verificando que los nodos estén listos..."
@@ -113,18 +110,18 @@ PID=$!
 sleep 60
 kill $PID
 
-echo "Versión de AWS CLI:"
+log "Versión de AWS CLI:"
 aws --version
 
-echo "Probando conexión al cluster:"
+log "Probando conexión al cluster:"
 if ! kubectl get nodes; then
-    echo "Error al conectar con el cluster"
+    log "Error al conectar con el cluster"
     exit 1
 fi
 
-echo "Configuración completada. El cluster EKS está listo para usar."
+log "Configuración completada. El cluster EKS está listo para usar."
 
-echo "Installing Helm"
+log "Instalando Helm"
 if ! curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash; then
     handle_error "Failed to install Helm"
 fi
@@ -141,51 +138,46 @@ sudo sudo cp /root/.kube/config /home/ubuntu/.kube/config
 sudo chown ubuntu:ubuntu /home/ubuntu/.kube/config
 
 # Añadir kubectl al PATH del usuario ubuntu
-echo 'export PATH=$PATH:/usr/local/bin' >> /home/ubuntu/.bashrc
+log 'export PATH=$PATH:/usr/local/bin' >> /home/ubuntu/.bashrc
 source /home/ubuntu/.bashrc
 
 aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
 
-echo "Installing Loki"
+log "Instalando Loki"
 helm repo add grafana https://grafana.github.io/helm-charts
 helm repo update
 helm upgrade --install loki grafana/loki-stack \
   --set grafana.enabled=true \
   --set grafana.service.type=LoadBalancer \
   --set grafana.adminPassword=$GRAFANA_ADMIN_PASSWORD \
+   --set grafana.sidecar.datasources.enabled=true \
+  --set loki.persistence.enabled=true \
+  --set loki.persistence.size=10Gi \
+  --set grafana.datasources."datasources\.yaml".apiVersion=1 \
+  --set grafana.datasources."datasources\.yaml".datasources[0].name=Loki \
+  --set grafana.datasources."datasources\.yaml".datasources[0].type=loki \
+  --set grafana.datasources."datasources\.yaml".datasources[0].url=http://loki:3100 \
+  --set grafana.datasources."datasources\.yaml".datasources[0].access=proxy \
   --timeout 10m
 
-# echo "Waiting for Grafana pod to be ready..."
-# kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana --timeout=300s
+log "Esperando a que Grafana esté listo..."
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana --timeout=300s
 
-# echo "Waiting for Grafana service to get an external address..."
-for i in {1..30}; do
-  GRAFANA_URL=$(kubectl get svc loki-grafana -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-  if [ -z "$GRAFANA_URL" ]; then
-    GRAFANA_URL=$(kubectl get svc loki-grafana -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-  fi
-  if [ -n "$GRAFANA_URL" ]; then
-    echo "Grafana LoadBalancer address: $GRAFANA_URL"
-    break
-  fi
-  echo "Waiting for LoadBalancer address... (attempt $i/30)"
-  sleep 10
-done
+log "Esperando a que Loki esté listo..."
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=loki --timeout=300s
 
-if [ -z "$GRAFANA_URL" ]; then
-  echo "Failed to get LoadBalancer address for Grafana"
-  echo "Current service status:"
-  kubectl get svc loki-grafana -o yaml
-  echo "Pod status:"
-  kubectl get pods -l app.kubernetes.io/name=grafana
-  exit 1
-fi
-
-#GRAFANA_URL=$(kubectl get service loki-grafana -o jsonpath="{.status.loadBalancer.ingress[0].hostname}")
+GRAFANA_URL=$(kubectl get service loki-grafana -o jsonpath="{.status.loadBalancer.ingress[0].hostname}")
 GRAFANA_PASSWORD=$(kubectl get secret loki-grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
 
-echo "Grafana URL: http://$GRAFANA_URL"
-echo "Grafana admin password: $GRAFANA_PASSWORD"
+log "Verificando el estado de Loki"
+kubectl get pods -l app=loki
+kubectl get svc -l app=loki
+
+log "Verificando la configuración de la fuente de datos de Loki"
+kubectl get configmap loki-grafana-datasource -o yaml
+
+log "Grafana URL: http://$GRAFANA_URL"
+log "Grafana admin password: $GRAFANA_PASSWORD"
 
 log "Configuración del cluster EKS completada."
-echo "All necessary tools have been installed and cluster is ready."
+log "Todas las herramientas necesarias han sido instaladas y el cluster está listo."

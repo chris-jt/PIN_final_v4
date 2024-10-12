@@ -147,11 +147,6 @@ jobs:
           CLUSTER_NAME=$(ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} 'echo $CLUSTER_NAME')
           echo "cluster_name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
         
-      - name: Wait for Grafana LoadBalancer
-        run: |
-          ssh -i jenkins.pem -o StrictHostKeyChecking=no ubuntu@${{ needs.Deploy_CloudFormation.outputs.ec2_ip }} '
-          kubectl wait --for=condition=ready service loki-grafana --timeout=300s
-          '
     
       - name: Get Grafana info
         id: grafana_info
