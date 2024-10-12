@@ -145,6 +145,8 @@ jobs:
   Deploy_Nginx:
       needs: [Deploy_CloudFormation, Conexion_EC2]
       runs-on: ubuntu-latest
+      outputs:
+        nginx_url: ${{ steps.nginx-url.outputs.nginx_url }}
       steps:
       - name: Checkout code
         uses: actions/checkout@v3
