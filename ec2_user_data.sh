@@ -148,6 +148,7 @@ helm repo update
 helm upgrade --install loki grafana/loki-stack \
   --set grafana.enabled=true \
   --set grafana.service.type=LoadBalancer \
+  --set grafana.adminPassword=adminPIN \
   --timeout 10m
 
 # echo "Waiting for Grafana pod to be ready..."
