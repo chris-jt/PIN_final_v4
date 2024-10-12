@@ -151,8 +151,6 @@ helm upgrade --install loki grafana/loki-stack \
   --set grafana.service.type=LoadBalancer \
   --set grafana.adminPassword=$GRAFANA_ADMIN_PASSWORD \
    --set grafana.sidecar.datasources.enabled=true \
-  --set loki.persistence.enabled=true \
-  --set loki.persistence.size=10Gi \
   --set grafana.datasources."datasources\.yaml".apiVersion=1 \
   --set grafana.datasources."datasources\.yaml".datasources[0].name=Loki \
   --set grafana.datasources."datasources\.yaml".datasources[0].type=loki \
